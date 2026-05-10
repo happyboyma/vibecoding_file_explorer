@@ -56,7 +56,7 @@ jobs:
           script: |
             set -e
             cd /root/vibecoding_file_explorer
-            npm ci --prefix server --omit=dev
+            npm ci --omit=dev
             pm2 restart file-explorer || \
               ROOT_DIR=/root/files PORT=3001 HOST=0.0.0.0 \
               pm2 start server/dist/index.js --name file-explorer
