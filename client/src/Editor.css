@@ -1,0 +1,376 @@
+/* ── Full-screen overlay ── */
+.editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  animation: editorSlideIn .2s cubic-bezier(.4,0,.2,1);
+}
+
+@keyframes editorSlideIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Header ── */
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 20px;
+  height: 56px;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  flex-shrink: 0;
+}
+
+.editor-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-logo { font-size: 18px; flex-shrink: 0; }
+
+.editor-filename {
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 7px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 5px 10px;
+  outline: none;
+  max-width: 340px;
+  min-width: 180px;
+  transition: background .15s, border-color .15s;
+}
+
+.editor-filename::placeholder { color: rgba(255,255,255,.4); font-weight: 400; }
+.editor-filename:focus { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.45); }
+
+.editor-ext {
+  color: rgba(255,255,255,.5);
+  font-size: 14px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.editor-dirty-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #facc15;
+  flex-shrink: 0;
+}
+
+.editor-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.editor-action-btn {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+
+.editor-action-btn:active { transform: scale(.96); }
+.editor-action-btn:disabled { opacity: .45; cursor: default; }
+
+.editor-action-btn.save {
+  background: #6366f1;
+  color: #fff;
+  box-shadow: 0 1px 6px rgba(99,102,241,.4);
+}
+.editor-action-btn.save:hover:not(:disabled) { background: #4f46e5; }
+.editor-action-btn.save.saved { background: #16a34a; }
+
+.editor-action-btn.md {
+  background: rgba(255,255,255,.12);
+  color: rgba(255,255,255,.9);
+  border: 1px solid rgba(255,255,255,.2);
+}
+.editor-action-btn.md:hover { background: rgba(255,255,255,.22); }
+
+.editor-action-btn.pdf {
+  background: #dc2626;
+  color: #fff;
+  box-shadow: 0 1px 6px rgba(220,38,38,.35);
+}
+.editor-action-btn.pdf:hover:not(:disabled) { background: #b91c1c; }
+
+.editor-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.8);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s;
+  margin-left: 4px;
+}
+.editor-close-btn:hover { background: rgba(255,255,255,.22); color: #fff; }
+
+/* ── Toolbar ── */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  color: #475569;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  user-select: none;
+}
+
+.tb-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.tb-btn.active {
+  background: #e0e7ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+.tb-btn:disabled { opacity: .35; cursor: default; }
+
+.tb-divider {
+  width: 1px;
+  height: 20px;
+  background: #e2e8f0;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ── Editor body ── */
+.editor-body {
+  flex: 1;
+  overflow-y: auto;
+  background: #fafafa;
+  display: flex;
+  justify-content: center;
+  padding: 40px 24px 80px;
+}
+
+.editor-content {
+  width: 100%;
+  max-width: 760px;
+}
+
+/* ── ProseMirror content styles ── */
+.editor-content .ProseMirror {
+  min-height: calc(100vh - 200px);
+  outline: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 48px 56px;
+  box-shadow: 0 1px 8px rgba(0,0,0,.05);
+  font-size: 15px;
+  line-height: 1.8;
+  color: #1e293b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+.editor-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #cbd5e1;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+.editor-content .ProseMirror h1 {
+  font-size: 2em;
+  font-weight: 700;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 10px;
+  margin: 32px 0 16px;
+  color: #0f172a;
+}
+
+.editor-content .ProseMirror h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 6px;
+  margin: 28px 0 12px;
+}
+
+.editor-content .ProseMirror h3 {
+  font-size: 1.2em;
+  font-weight: 600;
+  margin: 24px 0 10px;
+}
+
+.editor-content .ProseMirror h4,
+.editor-content .ProseMirror h5,
+.editor-content .ProseMirror h6 {
+  font-weight: 600;
+  margin: 20px 0 8px;
+}
+
+.editor-content .ProseMirror p { margin: 10px 0; }
+
+.editor-content .ProseMirror strong { font-weight: 700; }
+
+.editor-content .ProseMirror em { font-style: italic; }
+
+.editor-content .ProseMirror u { text-decoration: underline; }
+
+.editor-content .ProseMirror s { text-decoration: line-through; color: #94a3b8; }
+
+.editor-content .ProseMirror mark {
+  background: #fef08a;
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+.editor-content .ProseMirror code {
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.88em;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  color: #e11d48;
+}
+
+.editor-content .ProseMirror pre {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: 18px 22px;
+  margin: 18px 0;
+  overflow-x: auto;
+}
+
+.editor-content .ProseMirror pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-size: 0.875em;
+}
+
+.editor-content .ProseMirror blockquote {
+  border-left: 4px solid #6366f1;
+  margin: 16px 0;
+  padding: 10px 18px;
+  background: #f5f3ff;
+  border-radius: 0 8px 8px 0;
+  color: #64748b;
+}
+
+.editor-content .ProseMirror ul,
+.editor-content .ProseMirror ol {
+  padding-left: 24px;
+  margin: 12px 0;
+}
+
+.editor-content .ProseMirror li { margin: 4px 0; }
+
+.editor-content .ProseMirror hr {
+  border: none;
+  border-top: 2px solid #e2e8f0;
+  margin: 28px 0;
+}
+
+.editor-content .ProseMirror a {
+  color: #6366f1;
+  text-decoration: underline;
+}
+
+.editor-content .ProseMirror img { max-width: 100%; border-radius: 8px; }
+
+/* ── Load error ── */
+.editor-load-error {
+  padding: 32px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 760px;
+}
+
+/* ── Toast ── */
+.editor-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  z-index: 600;
+  white-space: nowrap;
+  animation: toastIn .25s cubic-bezier(.34,1.56,.64,1);
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.editor-toast.ok { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+.editor-toast.err { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .editor-header { height: auto; padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
+  .editor-header-left { flex: 1 1 100%; }
+  .editor-header-right { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .editor-filename { max-width: 100%; min-width: 0; flex: 1; font-size: 14px; }
+  .editor-action-btn { padding: 5px 10px; font-size: 12px; }
+  .editor-toolbar { padding: 4px 8px; gap: 1px; }
+  .tb-btn { min-width: 28px; height: 28px; font-size: 12px; }
+  .editor-body { padding: 16px 8px 60px; }
+  .editor-content .ProseMirror {
+    padding: 20px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .editor-action-btn { padding: 5px 8px; font-size: 11px; }
+  .editor-close-btn { width: 28px; height: 28px; font-size: 12px; }
+}
