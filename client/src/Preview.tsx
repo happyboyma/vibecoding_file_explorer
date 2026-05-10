@@ -15,9 +15,11 @@ interface Props {
   onDeleted: () => void;
 }
 
-type FileKind = "image" | "pdf" | "markdown" | "html" | "text" | "other";
+type FileKind = "image" | "video" | "audio" | "pdf" | "markdown" | "html" | "text" | "other";
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"]);
+const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "avi", "mkv", "m4v", "ogv"]);
+const AUDIO_EXTS = new Set(["mp3", "wav", "flac", "m4a", "ogg", "aac", "opus"]);
 const TEXT_EXTS  = new Set(["txt", "json", "yaml", "yml", "toml", "xml",
                              "css", "js", "ts", "tsx", "jsx", "sh", "py", "go",
                              "rs", "java", "c", "cpp", "h", "csv", "env"]);
@@ -25,6 +27,8 @@ const TEXT_EXTS  = new Set(["txt", "json", "yaml", "yml", "toml", "xml",
 function getKind(name: string): FileKind {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (IMAGE_EXTS.has(ext)) return "image";
+  if (VIDEO_EXTS.has(ext)) return "video";
+  if (AUDIO_EXTS.has(ext)) return "audio";
   if (ext === "pdf") return "pdf";
   if (ext === "md" || ext === "markdown") return "markdown";
   if (ext === "html" || ext === "htm") return "html";
@@ -115,6 +119,31 @@ export default function Preview({ lang, filePath, fileName, fileSize, onClose, o
           {!loading && !error && kind === "image" && (
             <div className="preview-image-wrap">
               <img src={fileUrl} alt={fileName} className="preview-image" />
+            </div>
+          )}
+
+          {!loading && !error && kind === "video" && (
+            <div className="preview-media-wrap">
+              <video
+                className="preview-video"
+                src={fileUrl}
+                controls
+                controlsList="nodownload"
+                playsInline
+              />
+            </div>
+          )}
+
+          {!loading && !error && kind === "audio" && (
+            <div className="preview-audio-wrap">
+              <div className="preview-audio-icon">🎵</div>
+              <p className="preview-audio-name">{fileName}</p>
+              <audio
+                className="preview-audio"
+                src={fileUrl}
+                controls
+                controlsList="nodownload"
+              />
             </div>
           )}
 
