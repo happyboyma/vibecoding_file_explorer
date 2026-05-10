@@ -43,6 +43,13 @@ function FileIcon({ isDir, isApp, name }: { isDir: boolean; isApp: boolean; name
   return <span>{map[ext] ?? "📄"}</span>;
 }
 
+interface FavoriteItem {
+  path: string;
+  name: string;
+  isDirectory: boolean;
+  isApp: boolean;
+}
+
 export default function App() {
   const [lang, setLang] = useState<Lang>("zh");
   const t = translations[lang];
@@ -51,9 +58,12 @@ export default function App() {
   const [searchParams, setSearchParams] = useSearchParams();
   const routerNavigate = useNavigate();
 
-  const currentPath  = searchParams.get("dir")     || "/";
-  const previewPath  = searchParams.get("preview")  || null;
-  const editPath     = searchParams.get("edit")     || null;
+  const currentPath = searchParams.get("dir")     || "/";
+  const previewPath = searchParams.get("preview")  || null;
+  const editPath    = searchParams.get("edit")     || null;
+  const viewMode    = searchParams.get("view")     || null;
+
+  const isInFavoritesView = viewMode === "favorites";
 
   // Track overlays opened during this session so we can use navigate(-1) safely
   const overlayDepth = useRef(0);
@@ -62,6 +72,14 @@ export default function App() {
     overlayDepth.current = 0;
     setSearchParams({ dir: path });
   }, [setSearchParams]);
+
+  const openFavorites = useCallback(() => {
+    setSearchParams({ dir: currentPath, view: "favorites" });
+  }, [currentPath, setSearchParams]);
+
+  const closeFavorites = useCallback(() => {
+    setSearchParams({ dir: currentPath });
+  }, [currentPath, setSearchParams]);
 
   const openPreview = useCallback((filePath: string) => {
     overlayDepth.current += 1;
@@ -83,25 +101,69 @@ export default function App() {
   }, [currentPath, setSearchParams]);
 
   // ── Directory data ────────────────────────────────────────────────
-  const [items, setItems]   = useState<FSEntry[]>([]);
+  const [items, setItems]     = useState<FSEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState("");
+  const [error, setError]     = useState("");
 
   type SortField = "name" | "size" | "mtime";
   type SortDir   = "asc"  | "desc";
   const [sortBy,  setSortBy]  = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
+  // ── Favorites (localStorage) ──────────────────────────────────────
+  const [favorites, setFavorites] = useState<FavoriteItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem("fe_favorites") || "[]"); }
+    catch { return []; }
+  });
+
+  // Per-directory custom order: { [dirPath]: itemName[] }
+  const [orders, setOrders] = useState<Record<string, string[]>>(() => {
+    try { return JSON.parse(localStorage.getItem("fe_orders") || "{}"); }
+    catch { return {}; }
+  });
+
+  // ── Drag state ────────────────────────────────────────────────────
+  const [dragSrc,    setDragSrc]    = useState<string | null>(null);
+  const [dragTarget, setDragTarget] = useState<string | null>(null);
+
+  // ── Helpers ───────────────────────────────────────────────────────
+  function isFav(path: string) { return favorites.some(f => f.path === path); }
+
+  function toggleFav(item: FavoriteItem) {
+    setFavorites(prev => {
+      const next = isFav(item.path)
+        ? prev.filter(f => f.path !== item.path)
+        : [...prev, item];
+      localStorage.setItem("fe_favorites", JSON.stringify(next));
+      return next;
+    });
+  }
+
   function cycleSort(field: SortField) {
-    if (sortBy === field) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(field);
-      setSortDir("asc");
+    // Clear custom order when explicitly choosing a sort column
+    if (orders[currentPath]) {
+      setOrders(prev => {
+        const next = { ...prev };
+        delete next[currentPath];
+        localStorage.setItem("fe_orders", JSON.stringify(next));
+        return next;
+      });
     }
+    if (sortBy === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortBy(field); setSortDir("asc"); }
+  }
+
+  function resetOrder() {
+    setOrders(prev => {
+      const next = { ...prev };
+      delete next[currentPath];
+      localStorage.setItem("fe_orders", JSON.stringify(next));
+      return next;
+    });
   }
 
   function sortIndicator(field: SortField) {
+    if (orders[currentPath]) return null;
     if (sortBy !== field) return <span className="sort-icon">⇅</span>;
     return <span className="sort-icon active">{sortDir === "asc" ? "↑" : "↓"}</span>;
   }
@@ -112,7 +174,6 @@ export default function App() {
     try {
       const data = await api.ls(path);
       setItems(data.items);
-      // Sync URL if server normalised the path
       if (data.path !== path) {
         setSearchParams({ dir: data.path }, { replace: true });
       }
@@ -123,7 +184,6 @@ export default function App() {
     }
   }, [setSearchParams]);
 
-  // Reload whenever the directory URL param changes (including back/forward)
   useEffect(() => { fetchDir(currentPath); }, [currentPath]);   // eslint-disable-line
 
   // ── Search ────────────────────────────────────────────────────────
@@ -142,14 +202,13 @@ export default function App() {
     }
   };
 
-  // Clear search results when directory changes
   useEffect(() => { setSearchResults(null); setSearchQuery(""); }, [currentPath]);
 
   // ── Rename ────────────────────────────────────────────────────────
   const [renamingItem, setRenamingItem] = useState<string | null>(null);
   const [renameValue,  setRenameValue]  = useState("");
 
-  const startRename  = (name: string) => { setRenamingItem(name); setRenameValue(name); };
+  const startRename = (name: string) => { setRenamingItem(name); setRenameValue(name); };
 
   const commitRename = async () => {
     if (!renamingItem || !renameValue.trim() || renameValue === renamingItem) {
@@ -247,7 +306,7 @@ export default function App() {
     : null;
 
   // ── Breadcrumbs ───────────────────────────────────────────────────
-  const breadcrumbs = () => {
+  const crumbs = (() => {
     const parts = currentPath.split("/").filter(Boolean);
     return [
       { label: t.root, path: "/" },
@@ -256,27 +315,77 @@ export default function App() {
         path: "/" + parts.slice(0, i + 1).join("/"),
       })),
     ];
-  };
+  })();
 
-  const crumbs = breadcrumbs();
-
+  // ── Display items (sort or custom order) ──────────────────────────
   const rawDisplay = searchResults ?? items;
-  const displayItems = [...rawDisplay].sort((a, b) => {
-    // directories always first
-    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-    let cmp = 0;
-    if (sortBy === "name") {
-      cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-    } else if (sortBy === "size") {
-      cmp = (("size" in a ? (a as FSEntry).size : 0)) - (("size" in b ? (b as FSEntry).size : 0));
-    } else {
-      const at = "mtime" in a ? new Date((a as FSEntry).mtime).getTime() : 0;
-      const bt = "mtime" in b ? new Date((b as FSEntry).mtime).getTime() : 0;
-      cmp = at - bt;
-    }
-    return sortDir === "asc" ? cmp : -cmp;
-  });
+  const customOrder = !searchResults ? orders[currentPath] : undefined;
 
+  const displayItems: (FSEntry | SearchResult)[] = customOrder
+    ? (() => {
+        const byName = new Map(rawDisplay.map(i => [i.name, i]));
+        const ordered: (FSEntry | SearchResult)[] = [];
+        for (const name of customOrder) {
+          const it = byName.get(name);
+          if (it) { ordered.push(it); byName.delete(name); }
+        }
+        for (const it of byName.values()) ordered.push(it);
+        return ordered;
+      })()
+    : [...rawDisplay].sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+        let cmp = 0;
+        if (sortBy === "name") {
+          cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+        } else if (sortBy === "size") {
+          cmp = (("size" in a ? (a as FSEntry).size : 0)) - (("size" in b ? (b as FSEntry).size : 0));
+        } else {
+          const at = "mtime" in a ? new Date((a as FSEntry).mtime).getTime() : 0;
+          const bt = "mtime" in b ? new Date((b as FSEntry).mtime).getTime() : 0;
+          cmp = at - bt;
+        }
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+
+  // ── Drag handlers (need displayItems in scope) ────────────────────
+  const canDrag = !searchResults && !isInFavoritesView;
+
+  function handleDragStart(e: React.DragEvent, name: string) {
+    e.dataTransfer.effectAllowed = "move";
+    setDragSrc(name);
+  }
+
+  function handleDragOver(e: React.DragEvent, name: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragTarget(dragSrc !== name ? name : null);
+  }
+
+  function handleDrop(e: React.DragEvent, targetName: string) {
+    e.preventDefault();
+    if (!dragSrc || dragSrc === targetName) { setDragSrc(null); setDragTarget(null); return; }
+
+    const currentList = displayItems.map(i => i.name);
+    const fromIdx = currentList.indexOf(dragSrc);
+    const toIdx   = currentList.indexOf(targetName);
+    if (fromIdx === -1 || toIdx === -1) { setDragSrc(null); setDragTarget(null); return; }
+
+    const newOrder = [...currentList];
+    newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, dragSrc);
+
+    setOrders(prev => {
+      const next = { ...prev, [currentPath]: newOrder };
+      localStorage.setItem("fe_orders", JSON.stringify(next));
+      return next;
+    });
+    setDragSrc(null);
+    setDragTarget(null);
+  }
+
+  function handleDragEnd() { setDragSrc(null); setDragTarget(null); }
+
+  // ── Counts ────────────────────────────────────────────────────────
   const fileCount   = items.filter((i) => !i.isDirectory).length;
   const folderCount = items.filter((i) => i.isDirectory).length;
 
@@ -307,6 +416,13 @@ export default function App() {
         <div className="header-spacer" />
 
         <div className="header-actions">
+          <button
+            className={`btn btn-ghost${isInFavoritesView ? " btn-fav-active" : ""}`}
+            onClick={() => isInFavoritesView ? closeFavorites() : openFavorites()}
+          >
+            ⭐ {lang === "zh" ? "收藏夹" : "Favorites"}
+            {favorites.length > 0 && <span className="fav-count">{favorites.length}</span>}
+          </button>
           <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}>↑ {t.upload}</button>
           <input ref={fileInputRef} type="file" multiple hidden onChange={handleUpload} />
           <button className="btn btn-ghost" onClick={() => folderInputRef.current?.click()}>🚀 {lang === "zh" ? "上传应用" : "Upload App"}</button>
@@ -322,17 +438,32 @@ export default function App() {
 
       {/* ── Breadcrumb ── */}
       <nav className="breadcrumb-bar">
-        {crumbs.map((b, i) => (
-          <span key={b.path} style={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {i > 0 && <span className="sep">›</span>}
-            <button
-              className={`crumb ${i === crumbs.length - 1 ? "current" : ""}`}
-              onClick={() => i < crumbs.length - 1 && navigateTo(b.path)}
-            >
-              {i === 0 && "🏠 "}{b.label}
-            </button>
-          </span>
-        ))}
+        {isInFavoritesView ? (
+          <>
+            <button className="crumb" onClick={closeFavorites}>🏠 {t.root}</button>
+            <span className="sep">›</span>
+            <button className="crumb current">⭐ {lang === "zh" ? "收藏夹" : "Favorites"}</button>
+          </>
+        ) : (
+          <>
+            {crumbs.map((b, i) => (
+              <span key={b.path} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                {i > 0 && <span className="sep">›</span>}
+                <button
+                  className={`crumb ${i === crumbs.length - 1 ? "current" : ""}`}
+                  onClick={() => i < crumbs.length - 1 && navigateTo(b.path)}
+                >
+                  {i === 0 && "🏠 "}{b.label}
+                </button>
+              </span>
+            ))}
+            {customOrder && (
+              <button className="btn-reset-order" onClick={resetOrder}>
+                {lang === "zh" ? "↺ 重置排序" : "↺ Reset Order"}
+              </button>
+            )}
+          </>
+        )}
       </nav>
 
       {/* ── New folder bar ── */}
@@ -353,118 +484,210 @@ export default function App() {
 
       {/* ── Content ── */}
       <main className="content">
-        {searchResults !== null && (
-          <div className="search-banner">
-            🔍 <strong>{searchResults.length}</strong>&nbsp;
-            {t.searchResults(searchResults.length, searchQuery).replace(/^\d+ /, "")}
-            &nbsp;—&nbsp;<em>{searchQuery}</em>
-          </div>
-        )}
 
-        {loading ? (
-          <div className="loading-wrap"><div className="spinner" />{t.loading}</div>
-        ) : displayItems.length === 0 ? (
+        {/* ── Favorites view ── */}
+        {isInFavoritesView ? (
           <div className="file-table">
-            <div className="empty-state">
-              <span className="empty-icon">{searchResults !== null ? "🔍" : "📂"}</span>
-              <p>{searchResults !== null ? t.noResults : t.empty}</p>
-            </div>
+            {favorites.length === 0 ? (
+              <div className="empty-state">
+                <span className="empty-icon">⭐</span>
+                <p>{lang === "zh"
+                  ? "还没有收藏，悬停文件行后点击 ☆ 添加"
+                  : "No favorites yet — hover a row and click ☆ to add."}</p>
+              </div>
+            ) : (
+              <>
+                <div className="file-table-header">
+                  <div />
+                  <div>{lang === "zh" ? "名称" : "Name"}</div>
+                  <div />
+                  <div style={{ textAlign: "right" }}>{lang === "zh" ? "路径" : "Path"}</div>
+                  <div />
+                </div>
+                {favorites.map(fav => {
+                  const appUrl = fav.isApp ? `/apps/${encodeURIComponent(fav.name)}/` : null;
+                  return (
+                    <div key={fav.path} className={`file-row ${fav.isApp ? "app-dir" : fav.isDirectory ? "dir" : "file"}`}>
+                      <div className="cell-icon">
+                        <FileIcon isDir={fav.isDirectory} isApp={fav.isApp} name={fav.name} />
+                      </div>
+                      <div className="cell-name">
+                        <span
+                          className={`name-text ${fav.isApp ? "app-clickable" : fav.isDirectory ? "" : "file-clickable"}`}
+                          onClick={() => fav.isApp
+                            ? window.open(appUrl!, "_blank")
+                            : fav.isDirectory ? navigateTo(fav.path) : openPreview(fav.path)}
+                        >
+                          {fav.name}
+                          {fav.isApp && <span className="app-badge">{lang === "zh" ? "应用" : "APP"}</span>}
+                        </span>
+                      </div>
+                      <div className="cell-size" />
+                      <div className="cell-date fav-path-cell">{fav.path}</div>
+                      <div className="cell-actions">
+                        <button
+                          className="action-btn fav-btn fav-active"
+                          onClick={() => toggleFav(fav)}
+                          title={lang === "zh" ? "取消收藏" : "Remove from favorites"}
+                        >★</button>
+                        {!fav.isDirectory && (
+                          <button className="action-btn" onClick={() => api.download(fav.path)}>{t.download}</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </div>
         ) : (
-          <div className="file-table">
-            <div className="file-table-header">
-              <div />
-              <div className="sortable-col" onClick={() => cycleSort("name")}>
-                {lang === "zh" ? "名称" : "Name"}{sortIndicator("name")}
+
+          /* ── Regular file listing ── */
+          <>
+            {searchResults !== null && (
+              <div className="search-banner">
+                🔍 <strong>{searchResults.length}</strong>&nbsp;
+                {t.searchResults(searchResults.length, searchQuery).replace(/^\d+ /, "")}
+                &nbsp;—&nbsp;<em>{searchQuery}</em>
               </div>
-              <div className="sortable-col" style={{ justifyContent: "flex-end" }} onClick={() => cycleSort("size")}>
-                {lang === "zh" ? "大小" : "Size"}{sortIndicator("size")}
-              </div>
-              <div className="sortable-col" style={{ justifyContent: "flex-end" }} onClick={() => cycleSort("mtime")}>
-                {lang === "zh" ? "修改时间" : "Modified"}{sortIndicator("mtime")}
-              </div>
-              <div />
-            </div>
+            )}
 
-            {displayItems.map((item) => {
-              const name     = item.name;
-              const isDir    = item.isDirectory;
-              const isApp    = (item as FSEntry).isApp ?? false;
-              const itemPath = searchResults
-                ? (item as SearchResult).path
-                : joinPath(currentPath, name);
-              // App URL rooted at /apps/:name/ for correct relative asset resolution
-              const appUrl   = isApp ? `/apps/${encodeURIComponent(name)}/` : null;
-
-              return (
-                <div key={itemPath} className={`file-row ${isApp ? "app-dir" : isDir ? "dir" : "file"}`}>
-                  <div className="cell-icon"><FileIcon isDir={isDir} isApp={isApp} name={name} /></div>
-
-                  <div className="cell-name">
-                    {renamingItem === name && !searchResults ? (
-                      <input
-                        autoFocus className="name-text"
-                        value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
-                        onBlur={commitRename}
-                        onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") setRenamingItem(null); }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <span
-                        className={`name-text ${isApp ? "app-clickable" : isDir ? "" : "file-clickable"}`}
-                        onClick={() => isApp
-                          ? window.open(appUrl!, "_blank")
-                          : isDir ? navigateTo(itemPath) : openPreview(itemPath)}
-                        title={isApp ? (lang === "zh" ? "点击启动应用" : "Click to launch app") : name}
-                      >
-                        {name}
-                        {isApp && <span className="app-badge">{lang === "zh" ? "应用" : "APP"}</span>}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="cell-size">
-                    {"size" in item ? (isDir ? "—" : formatSize((item as FSEntry).size)) : ""}
-                  </div>
-                  <div className="cell-date">
-                    {"mtime" in item ? formatDate((item as FSEntry).mtime) : ""}
-                  </div>
-
-                  <div className="cell-actions">
-                    {isApp && (
-                      <button className="action-btn launch" onClick={() => window.open(appUrl!, "_blank")}>
-                        {lang === "zh" ? "启动" : "Launch"}
-                      </button>
-                    )}
-                    {isApp && (
-                      <button className="action-btn" onClick={() => navigateTo(itemPath)}>
-                        {lang === "zh" ? "浏览" : "Browse"}
-                      </button>
-                    )}
-                    {!isDir && /\.(md|markdown)$/i.test(name) && (
-                      <button className="action-btn edit" onClick={() => openEditor(itemPath)}>{t.edit}</button>
-                    )}
-                    {!isDir && (
-                      <button className="action-btn" onClick={() => api.download(itemPath)}>{t.download}</button>
-                    )}
-                    {!searchResults && (
-                      <button className="action-btn" onClick={() => startRename(name)}>{t.rename}</button>
-                    )}
-                    <button className="action-btn danger" onClick={() => handleDelete(name, itemPath, isDir)}>{t.delete}</button>
-                  </div>
+            {loading ? (
+              <div className="loading-wrap"><div className="spinner" />{t.loading}</div>
+            ) : displayItems.length === 0 ? (
+              <div className="file-table">
+                <div className="empty-state">
+                  <span className="empty-icon">{searchResults !== null ? "🔍" : "📂"}</span>
+                  <p>{searchResults !== null ? t.noResults : t.empty}</p>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            ) : (
+              <div className="file-table">
+                <div className="file-table-header">
+                  <div />
+                  <div className="sortable-col" onClick={() => cycleSort("name")}>
+                    {lang === "zh" ? "名称" : "Name"}{sortIndicator("name")}
+                  </div>
+                  <div className="sortable-col" style={{ justifyContent: "flex-end" }} onClick={() => cycleSort("size")}>
+                    {lang === "zh" ? "大小" : "Size"}{sortIndicator("size")}
+                  </div>
+                  <div className="sortable-col" style={{ justifyContent: "flex-end" }} onClick={() => cycleSort("mtime")}>
+                    {lang === "zh" ? "修改时间" : "Modified"}{sortIndicator("mtime")}
+                  </div>
+                  <div />
+                </div>
+
+                {displayItems.map((item) => {
+                  const name     = item.name;
+                  const isDir    = item.isDirectory;
+                  const isApp    = (item as FSEntry).isApp ?? false;
+                  const itemPath = searchResults
+                    ? (item as SearchResult).path
+                    : joinPath(currentPath, name);
+                  const appUrl   = isApp ? `/apps/${encodeURIComponent(name)}/` : null;
+                  const favItem: FavoriteItem = { path: itemPath, name, isDirectory: isDir, isApp };
+                  const starred  = isFav(itemPath);
+                  const isDragOver = canDrag && dragTarget === name;
+                  const isDragging = canDrag && dragSrc === name;
+
+                  return (
+                    <div
+                      key={itemPath}
+                      className={`file-row ${isApp ? "app-dir" : isDir ? "dir" : "file"}${canDrag ? " draggable" : ""}${isDragging ? " dragging" : ""}${isDragOver ? " drag-over" : ""}`}
+                      draggable={canDrag}
+                      onDragStart={canDrag ? (e) => handleDragStart(e, name) : undefined}
+                      onDragOver={canDrag ? (e) => handleDragOver(e, name) : undefined}
+                      onDrop={canDrag ? (e) => handleDrop(e, name) : undefined}
+                      onDragEnd={canDrag ? handleDragEnd : undefined}
+                    >
+                      <div
+                        className="cell-icon"
+                        title={canDrag ? (lang === "zh" ? "拖拽重新排序" : "Drag to reorder") : undefined}
+                      >
+                        <FileIcon isDir={isDir} isApp={isApp} name={name} />
+                      </div>
+
+                      <div className="cell-name">
+                        {renamingItem === name && !searchResults ? (
+                          <input
+                            autoFocus className="name-text"
+                            value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") setRenamingItem(null); }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span
+                            className={`name-text ${isApp ? "app-clickable" : isDir ? "" : "file-clickable"}`}
+                            onClick={() => isApp
+                              ? window.open(appUrl!, "_blank")
+                              : isDir ? navigateTo(itemPath) : openPreview(itemPath)}
+                            title={isApp ? (lang === "zh" ? "点击启动应用" : "Click to launch app") : name}
+                          >
+                            {name}
+                            {isApp && <span className="app-badge">{lang === "zh" ? "应用" : "APP"}</span>}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="cell-size">
+                        {"size" in item ? (isDir ? "—" : formatSize((item as FSEntry).size)) : ""}
+                      </div>
+                      <div className="cell-date">
+                        {"mtime" in item ? formatDate((item as FSEntry).mtime) : ""}
+                      </div>
+
+                      <div className="cell-actions">
+                        <button
+                          className={`action-btn fav-btn${starred ? " fav-active" : ""}`}
+                          onClick={() => toggleFav(favItem)}
+                          title={starred
+                            ? (lang === "zh" ? "取消收藏" : "Remove from favorites")
+                            : (lang === "zh" ? "添加到收藏" : "Add to favorites")}
+                        >{starred ? "★" : "☆"}</button>
+                        {isApp && (
+                          <button className="action-btn launch" onClick={() => window.open(appUrl!, "_blank")}>
+                            {lang === "zh" ? "启动" : "Launch"}
+                          </button>
+                        )}
+                        {isApp && (
+                          <button className="action-btn" onClick={() => navigateTo(itemPath)}>
+                            {lang === "zh" ? "浏览" : "Browse"}
+                          </button>
+                        )}
+                        {!isDir && /\.(md|markdown)$/i.test(name) && (
+                          <button className="action-btn edit" onClick={() => openEditor(itemPath)}>{t.edit}</button>
+                        )}
+                        {!isDir && (
+                          <button className="action-btn" onClick={() => api.download(itemPath)}>{t.download}</button>
+                        )}
+                        {!searchResults && (
+                          <button className="action-btn" onClick={() => startRename(name)}>{t.rename}</button>
+                        )}
+                        <button className="action-btn danger" onClick={() => handleDelete(name, itemPath, isDir)}>{t.delete}</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </main>
 
       {/* ── Status bar ── */}
-      {!loading && searchResults === null && (
+      {!loading && !isInFavoritesView && searchResults === null && (
         <footer className="status-bar">
           {lang === "zh"
             ? `${folderCount} 个文件夹，${fileCount} 个文件`
             : `${folderCount} folder${folderCount !== 1 ? "s" : ""}, ${fileCount} file${fileCount !== 1 ? "s" : ""}`}
+        </footer>
+      )}
+      {isInFavoritesView && (
+        <footer className="status-bar">
+          {lang === "zh"
+            ? `${favorites.length} 个收藏`
+            : `${favorites.length} favorite${favorites.length !== 1 ? "s" : ""}`}
         </footer>
       )}
 
@@ -478,9 +701,6 @@ export default function App() {
           onClose={closeOverlay}
           onEdit={/\.(md|markdown)$/i.test(previewTarget.name)
             ? () => {
-                // Replace the preview history entry with the editor entry directly.
-                // Calling closeOverlay() + openEditor() races because navigate(-1)
-                // is async and fires after setSearchParams, wiping the editor URL.
                 setSearchParams({ dir: currentPath, edit: previewTarget.path }, { replace: true });
               }
             : undefined}
