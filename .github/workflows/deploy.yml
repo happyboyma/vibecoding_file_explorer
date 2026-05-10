@@ -47,6 +47,27 @@ jobs:
           source: "client/dist/,server/dist/"
           target: /root/vibecoding_file_explorer/
 
+      - name: Install Chromium system dependencies
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            if command -v apt-get &>/dev/null; then
+              apt-get install -y --no-install-recommends \
+                libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+                libgtk-3-0 libnss3 libxss1 libxtst6 libxrandr2 libgbm1 \
+                libpango-1.0-0 libcairo2 libasound2 libx11-xcb1 \
+                libxcomposite1 libxcursor1 libxdamage1 libxfixes3 \
+                libxi6 libxrender1 fonts-liberation xdg-utils
+            elif command -v yum &>/dev/null; then
+              yum install -y atk at-spi2-atk cups-libs libdrm gtk3 \
+                nss libXScrnSaver libXtst libXrandr mesa-libgbm \
+                pango cairo alsa-lib libX11 libXcomposite libXcursor \
+                libXdamage libXext libXfixes libXi libXrender nss
+            fi
+
       - name: Restart app with PM2
         uses: appleboy/ssh-action@v1.0.3
         with:
