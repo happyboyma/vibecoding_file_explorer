@@ -87,17 +87,31 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState("");
 
+  type SortField = "name" | "size" | "mtime";
+  type SortDir   = "asc"  | "desc";
+  const [sortBy,  setSortBy]  = useState<SortField>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function cycleSort(field: SortField) {
+    if (sortBy === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+  }
+
+  function sortIndicator(field: SortField) {
+    if (sortBy !== field) return <span className="sort-icon">⇅</span>;
+    return <span className="sort-icon active">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  }
+
   const fetchDir = useCallback(async (path: string) => {
     setLoading(true);
     setError("");
     try {
       const data = await api.ls(path);
-      setItems(
-        data.items.sort((a, b) => {
-          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-          return a.name.localeCompare(b.name);
-        })
-      );
+      setItems(data.items);
       // Sync URL if server normalised the path
       if (data.path !== path) {
         setSearchParams({ dir: data.path }, { replace: true });
@@ -244,8 +258,25 @@ export default function App() {
     ];
   };
 
-  const crumbs      = breadcrumbs();
-  const displayItems = searchResults ?? items;
+  const crumbs = breadcrumbs();
+
+  const rawDisplay = searchResults ?? items;
+  const displayItems = [...rawDisplay].sort((a, b) => {
+    // directories always first
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    let cmp = 0;
+    if (sortBy === "name") {
+      cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    } else if (sortBy === "size") {
+      cmp = (("size" in a ? (a as FSEntry).size : 0)) - (("size" in b ? (b as FSEntry).size : 0));
+    } else {
+      const at = "mtime" in a ? new Date((a as FSEntry).mtime).getTime() : 0;
+      const bt = "mtime" in b ? new Date((b as FSEntry).mtime).getTime() : 0;
+      cmp = at - bt;
+    }
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
   const fileCount   = items.filter((i) => !i.isDirectory).length;
   const folderCount = items.filter((i) => i.isDirectory).length;
 
@@ -343,9 +374,15 @@ export default function App() {
           <div className="file-table">
             <div className="file-table-header">
               <div />
-              <div>{lang === "zh" ? "名称" : "Name"}</div>
-              <div style={{ textAlign: "right" }}>{lang === "zh" ? "大小" : "Size"}</div>
-              <div style={{ textAlign: "right" }}>{lang === "zh" ? "修改时间" : "Modified"}</div>
+              <div className="sortable-col" onClick={() => cycleSort("name")}>
+                {lang === "zh" ? "名称" : "Name"}{sortIndicator("name")}
+              </div>
+              <div className="sortable-col" style={{ justifyContent: "flex-end" }} onClick={() => cycleSort("size")}>
+                {lang === "zh" ? "大小" : "Size"}{sortIndicator("size")}
+              </div>
+              <div className="sortable-col" style={{ justifyContent: "flex-end" }} onClick={() => cycleSort("mtime")}>
+                {lang === "zh" ? "修改时间" : "Modified"}{sortIndicator("mtime")}
+              </div>
               <div />
             </div>
 

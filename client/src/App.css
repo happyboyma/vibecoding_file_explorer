@@ -314,6 +314,21 @@ body {
   user-select: none;
 }
 
+.sortable-col {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0 4px;
+  height: 26px;
+  transition: background .12s, color .12s;
+}
+.sortable-col:hover { background: #e9eef5; color: #334155; }
+
+.sort-icon { font-size: 11px; opacity: .35; }
+.sort-icon.active { opacity: 1; color: #6366f1; }
+
 .file-row {
   display: grid;
   grid-template-columns: 24px 1fr 90px 160px 160px;
