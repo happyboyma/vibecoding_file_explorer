@@ -25,9 +25,12 @@ if (fs.existsSync(clientDist)) {
 }
 
 // Serve HTML mini-apps at /apps/:appName/* with proper relative URL resolution
-app.get("/apps/:appName", (_req, res) => {
-  // Redirect bare name to trailing slash so relative URLs resolve correctly
-  res.redirect(301, `/apps/${_req.params.appName}/`);
+app.get("/apps/:appName", (req, res, next) => {
+  // Redirect bare name to trailing slash so relative URLs resolve correctly.
+  // With Express strict:false, this route also matches /apps/:appName/ — call
+  // next() in that case to avoid an infinite redirect loop.
+  if (req.path.endsWith("/")) return next();
+  res.redirect(301, `/apps/${req.params.appName}/`);
 });
 
 app.get("/apps/:appName/*", (req, res) => {
@@ -328,7 +331,13 @@ app.post("/api/convert/md-to-pdf", async (req, res) => {
 </html>`;
 
     const browser = await puppeteer.launch({
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ],
     });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
