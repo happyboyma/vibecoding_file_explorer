@@ -159,9 +159,8 @@ export default function Editor({ lang, filePath, currentDir, onClose, onSaved }:
     if (!savedPath) return;
     setExportState("exporting");
     try {
-      const { pdfPath } = await api.convertMdToPdf(savedPath);
-      api.download(pdfPath);
-      showToast(t.convertSuccess(pdfPath.split("/").pop()!), true);
+      const { name } = await api.convertMdToPdf(savedPath);
+      showToast(t.convertSuccess(name), true);
     } catch {
       showToast(t.editorPdfError, false);
     } finally {
