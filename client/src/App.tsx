@@ -440,7 +440,12 @@ export default function App() {
           fileSize={previewTarget.size}
           onClose={closeOverlay}
           onEdit={/\.(md|markdown)$/i.test(previewTarget.name)
-            ? () => { closeOverlay(); openEditor(previewTarget.path); }
+            ? () => {
+                // Replace the preview history entry with the editor entry directly.
+                // Calling closeOverlay() + openEditor() races because navigate(-1)
+                // is async and fires after setSearchParams, wiping the editor URL.
+                setSearchParams({ dir: currentPath, edit: previewTarget.path }, { replace: true });
+              }
             : undefined}
           onDeleted={() => { closeOverlay(); fetchDir(currentPath); }}
         />
