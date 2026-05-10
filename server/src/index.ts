@@ -330,7 +330,17 @@ app.post("/api/convert/md-to-pdf", async (req, res) => {
 <body>${bodyHtml}</body>
 </html>`;
 
+    // Prefer a system-installed Chromium (self-manages its own shared libs).
+    // Falls back to Puppeteer's bundled Chrome when none is found.
+    const systemChrome = [
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/google-chrome",
+    ].find((p) => { try { return fs.existsSync(p); } catch { return false; } });
+
     const browser = await puppeteer.launch({
+      ...(systemChrome ? { executablePath: systemChrome } : {}),
       headless: true,
       args: [
         "--no-sandbox",
