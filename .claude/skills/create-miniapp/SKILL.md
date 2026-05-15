@@ -1,7 +1,7 @@
 ---
 name: create-miniapp
-description: This skill should be used when the user asks to "创建一个miniapp", "新建一个应用", "做一个web应用", "生成备忘录", "创建备忘录", "做一个笔记应用", "create a miniapp", "build a mini app", "做一个待办", "做一个工具应用", "add a new app to the marketplace", "写个小应用", "做个记录工具", or wants to build any self-contained web application that should appear in the app marketplace.
-version: 0.2.0
+description: This skill should be used when the user asks to "创建一个miniapp", "新建一个应用", "做一个web应用", "生成备忘录", "创建备忘录", "做一个笔记应用", "create a miniapp", "build a mini app", "做一个待办", "做一个工具应用", "add a new app to the marketplace", "写个小应用", "做个记录工具", "查看备忘录", "列出备忘录", "读取备忘录", "删除备忘录", "更新备忘录", "搜索备忘录", "命令行操作备忘录", "用命令行增删改查", or needs to perform CLI CRUD operations on the memo app via the server API.
+version: 0.3.0
 ---
 
 # 创建 MiniApp
@@ -138,7 +138,110 @@ await fetch('/api/delete?path=' + encodeURIComponent(DATA_DIR + '/abc.json'), { 
 - **自动保存**：800ms 防抖，用户停止输入后自动保存，无需手动点保存
 - **移动端**：侧栏布局在窄屏时用 `position: absolute + transform` 做抽屉效果
 
+## 命令行 CRUD 操作备忘录
+
+使用 `scripts/memo_cli.py` 通过 HTTP API 对备忘录进行增删改查。脚本使用 Python 标准库，无需安装依赖。
+
+### 快速使用
+
+```bash
+SKILL=.claude/skills/create-miniapp/scripts
+python3 $SKILL/memo_cli.py list
+```
+
+或配置环境变量切换服务器：
+
+```bash
+export MEMO_API=http://47.93.2.83   # 公网（默认）
+export MEMO_API=http://localhost:3001  # 本地开发
+export MEMO_DIR=/notes              # 数据目录（默认 /notes）
+```
+
+### 列出所有备忘录
+
+```bash
+python3 memo_cli.py list
+```
+
+输出：ID、更新时间、标题、截止状态（✅/⚠️/❌）
+
+### 读取备忘录详情
+
+```bash
+python3 memo_cli.py read <id>
+```
+
+### 创建备忘录
+
+```bash
+# 指定参数
+python3 memo_cli.py create -t "标题" -c "正文内容"
+
+# 带截止时间（YYYY-MM-DDTHH:MM 格式）
+python3 memo_cli.py create -t "项目截止" -c "完成报告" -d "2026-05-20T18:00"
+
+# 交互式输入（不带参数）
+python3 memo_cli.py create
+```
+
+### 更新备忘录
+
+```bash
+# 只更新标题
+python3 memo_cli.py update <id> -t "新标题"
+
+# 更新内容
+python3 memo_cli.py update <id> -c "新正文"
+
+# 设置截止时间（空字符串清除）
+python3 memo_cli.py update <id> -d "2026-06-01T09:00"
+python3 memo_cli.py update <id> -d ""
+```
+
+### 删除备忘录
+
+```bash
+python3 memo_cli.py delete <id>        # 有确认提示
+python3 memo_cli.py delete <id> -f     # 跳过确认（-f/--force）
+```
+
+### 搜索备忘录
+
+```bash
+python3 memo_cli.py search "关键词"
+```
+
+在标题和正文中全文搜索，输出匹配片段。
+
+### 等价的原始 curl 命令
+
+当需要在脚本外直接调用 API 时：
+
+```bash
+BASE=http://47.93.2.83
+
+# 列出数据目录
+curl -s "$BASE/api/ls?path=%2Fnotes" | python3 -m json.tool
+
+# 读取单条记录
+curl -s "$BASE/api/read?path=%2Fnotes%2F<id>.json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['content'])"
+
+# 创建/更新（path + content 字段）
+curl -s -X POST "$BASE/api/save" \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/notes/<id>.json","content":"{\"id\":\"<id>\",\"title\":\"标题\",\"content\":\"内容\",\"updatedAt\":\"2026-05-15T00:00:00.000Z\",\"dueAt\":null}"}'
+
+# 删除
+curl -s -X DELETE "$BASE/api/delete?path=%2Fnotes%2F<id>.json"
+```
+
+路径需 URL 编码：`/notes/abc.json` → `%2Fnotes%2Fabc.json`（Python: `urllib.parse.quote('/notes/abc.json')`）
+
 ## 额外资源
+
+### 脚本
+- **`scripts/memo_cli.py`** — 完整 CRUD CLI 工具（list/read/create/update/delete/search）
+- **`scripts/memo.sh`** — Shell 快捷入口
 
 ### 模板文件
 - **`assets/memo-example/index.html`** — 完整备忘录应用（可运行，直接改名复用）
