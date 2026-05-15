@@ -75,29 +75,51 @@ mkdir -p /home/happym/Projects/<app-name>
 
 ### 第四步：写入文件
 
+使用 Write 工具将内容写到本地路径，例如 `/tmp/<app-name>/index.html`（单文件应用），或 `/tmp/<app-name>/` 下多个文件（静态模板应用）。
+
+### 第五步：上传到服务器
+
+使用 `scripts/upload_app.py` 将本地文件夹上传到公网服务器：
+
 ```bash
-# 将完整 HTML 内容写入
-cat > /home/happym/Projects/<app-name>/index.html << 'HTMLEOF'
-...完整 HTML 内容...
-HTMLEOF
+SCRIPT=.claude/skills/create-miniapp/scripts/upload_app.py
+
+# 预览将上传的文件（不实际上传）
+python3 $SCRIPT /tmp/<app-name> --dry-run
+
+# 上传（文件夹名即应用名）
+python3 $SCRIPT /tmp/<app-name>
+
+# 自定义服务器上的应用名称
+python3 $SCRIPT /tmp/<app-name> <自定义名称>
+
+# 切换目标服务器
+MEMO_API=http://localhost:3001 python3 $SCRIPT /tmp/<app-name>
 ```
 
-或使用 Write 工具直接写文件。
+上传成功后脚本输出：
+```
+✅ 上传成功！
+   应用地址：http://47.93.2.83/apps/<app-name>/
+   市场地址：http://47.93.2.83/
+```
 
-### 第五步：验证
+**注意**：
+- 应用名不能含空格或斜杠，中文名可用（如 `备忘录`）
+- `.git`、`node_modules`、`.DS_Store` 等自动忽略
+- 上传幂等，重复上传会覆盖已有文件
+
+### 第六步：验证
 
 ```bash
-# 确认文件存在
-ls -la /home/happym/Projects/<app-name>/
-
-# 如果服务在运行，检查可访问性
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/apps/<app-name>/
+# 检查应用是否可访问
+curl -s -o /dev/null -w "%{http_code}" http://47.93.2.83/apps/<app-name>/
+# 应返回 200
 ```
 
 告知用户：
-- 本地地址：`http://localhost:3001/apps/<app-name>/`
 - 公网地址：`http://47.93.2.83/apps/<app-name>/`
-- 刷新应用市场主页可见到新应用
+- 市场主页：`http://47.93.2.83/`（刷新后可见新应用）
 
 ## 服务器 API 速查
 
@@ -240,7 +262,8 @@ curl -s -X DELETE "$BASE/api/delete?path=%2Fnotes%2F<id>.json"
 ## 额外资源
 
 ### 脚本
-- **`scripts/memo_cli.py`** — 完整 CRUD CLI 工具（list/read/create/update/delete/search）
+- **`scripts/upload_app.py`** — 上传本地文件夹到服务器（支持 `--dry-run`）
+- **`scripts/memo_cli.py`** — 备忘录 CRUD CLI 工具（list/read/create/update/delete/search）
 - **`scripts/memo.sh`** — Shell 快捷入口
 
 ### 模板文件
