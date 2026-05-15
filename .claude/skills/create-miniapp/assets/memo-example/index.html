@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APP_TITLE</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1c1c1e;
+    --panel: #2c2c2e;
+    --item: #3a3a3c;
+    --item-active: #4a4a4e;
+    --accent: #ffd60a;       /* ← 主题色，可换成 #30d158(绿) #0a84ff(蓝) #ff453a(红) */
+    --text: #f5f5f7;
+    --sub: #8e8e93;
+    --border: #3a3a3c;
+    --danger: #ff453a;
+    --ok: #30d158;
+    --warn: #ff9f0a;
+  }
+
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── 侧栏 ── */
+  .sidebar {
+    width: 280px; min-width: 280px;
+    background: var(--panel);
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+  }
+  .sidebar-header { padding: 20px 16px 12px; border-bottom: 1px solid var(--border); }
+  .sidebar-title {
+    font-size: 1.4rem; font-weight: 700; color: var(--accent);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  }
+  .new-btn {
+    width: 100%; padding: 9px;
+    background: var(--accent); color: #000;
+    border: none; border-radius: 10px;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: opacity .15s;
+  }
+  .new-btn:hover { opacity: .88; }
+  .search-wrap { padding: 10px 12px; }
+  .search-wrap input {
+    width: 100%; padding: 8px 12px;
+    background: var(--item); border: none; border-radius: 8px;
+    color: var(--text); font-size: 0.88rem; outline: none;
+  }
+  .search-wrap input::placeholder { color: var(--sub); }
+  .item-list { flex: 1; overflow-y: auto; padding: 6px 8px; }
+  .item-list::-webkit-scrollbar { width: 4px; }
+  .item-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .list-item {
+    padding: 11px 12px; border-radius: 10px; cursor: pointer;
+    margin-bottom: 4px; transition: background .12s;
+    border: 1.5px solid transparent;
+  }
+  .list-item:hover { background: var(--item); }
+  .list-item.active { background: var(--item-active); border-color: var(--accent); }
+  .list-item-header { display: flex; align-items: flex-start; gap: 4px; margin-bottom: 3px; }
+  .list-item-title {
+    flex: 1; font-size: 0.92rem; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item-del-btn {
+    flex-shrink: 0; background: none; border: none;
+    color: transparent; cursor: pointer; font-size: 1rem;
+    line-height: 1; padding: 0 3px; border-radius: 4px; transition: color .12s, background .12s;
+  }
+  .list-item:hover .item-del-btn { color: var(--sub); }
+  .item-del-btn:hover { color: var(--danger) !important; background: rgba(255,69,58,.15); }
+  .list-item-meta {
+    font-size: 0.74rem; color: var(--sub);
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+  }
+  .list-item-preview {
+    color: var(--sub); font-size: 0.78rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
+  }
+  .due-tag {
+    font-size: 0.7rem; font-weight: 600; padding: 1px 6px;
+    border-radius: 4px; white-space: nowrap; flex-shrink: 0;
+  }
+  .due-tag.ok   { background: rgba(48,209,88,.15);  color: var(--ok); }
+  .due-tag.warn { background: rgba(255,159,10,.15); color: var(--warn); }
+  .due-tag.over { background: rgba(255,69,58,.15);  color: var(--danger); }
+  .empty-list { text-align: center; color: var(--sub); font-size: 0.88rem; padding: 40px 16px; }
+  .status-bar {
+    padding: 10px 14px; font-size: 0.76rem; color: var(--sub);
+    border-top: 1px solid var(--border); display: flex; align-items: center; gap: 6px;
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sub); flex-shrink: 0; transition: background .3s; }
+  .status-dot.saving { background: var(--accent); }
+  .status-dot.saved  { background: var(--ok); }
+  .status-dot.error  { background: var(--danger); }
+
+  /* ── 编辑区 ── */
+  .editor-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .editor-toolbar {
+    padding: 14px 20px 10px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .del-btn {
+    margin-left: auto; background: none; border: none;
+    color: var(--danger); cursor: pointer; font-size: 0.85rem;
+    padding: 6px 12px; border-radius: 8px; transition: background .15s;
+  }
+  .del-btn:hover { background: rgba(255,69,58,.15); }
+  .due-row {
+    padding: 8px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; font-size: 0.82rem;
+  }
+  .due-row label { color: var(--sub); white-space: nowrap; }
+  .due-input {
+    background: var(--item); border: 1px solid var(--border); border-radius: 7px;
+    color: var(--text); font-size: 0.82rem; padding: 4px 10px; outline: none;
+    transition: border-color .15s; color-scheme: dark;
+  }
+  .due-input:focus { border-color: var(--accent); }
+  .due-clear {
+    background: none; border: none; color: var(--sub); cursor: pointer;
+    font-size: 0.8rem; padding: 3px 6px; border-radius: 5px; transition: color .15s;
+  }
+  .due-clear:hover { color: var(--danger); }
+  .due-badge {
+    margin-left: auto; font-size: 0.8rem; font-weight: 600; padding: 3px 10px; border-radius: 6px;
+  }
+  .due-badge.ok   { background: rgba(48,209,88,.15);  color: var(--ok); }
+  .due-badge.warn { background: rgba(255,159,10,.15); color: var(--warn); }
+  .due-badge.over { background: rgba(255,69,58,.18);  color: var(--danger); }
+  .title-input {
+    width: 100%; background: none; border: none; color: var(--text);
+    font-size: 1.5rem; font-weight: 700; outline: none;
+    padding: 20px 24px 8px; font-family: inherit;
+  }
+  .title-input::placeholder { color: var(--sub); }
+  .content-input {
+    flex: 1; background: none; border: none; color: var(--text);
+    font-size: 0.98rem; line-height: 1.75; outline: none;
+    padding: 8px 24px 24px; resize: none; font-family: inherit;
+  }
+  .content-input::placeholder { color: var(--sub); }
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; color: var(--sub);
+  }
+  .empty-state .icon { font-size: 3rem; }
+  .empty-state p { font-size: 0.95rem; }
+  .back-btn {
+    display: flex; align-items: center; gap: 4px;
+    background: none; border: none; color: var(--accent); cursor: pointer;
+    font-size: 0.9rem; padding: 6px 8px; border-radius: 8px; transition: background .12s;
+  }
+  .back-btn:hover { background: rgba(255,214,10,.1); }
+
+  @media (max-width: 600px) {
+    .sidebar { width: 100%; min-width: 0; position: absolute; z-index: 10; height: 100%; transform: translateX(0); transition: transform .25s; }
+    .sidebar.hidden { transform: translateX(-100%); }
+    .editor-area { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-title">APP_ICON APP_TITLE</div>
+    <button class="new-btn" id="newBtn">＋ 新建 APP_ITEM_NAME</button>
+  </div>
+  <div class="search-wrap">
+    <input id="searchInput" placeholder="搜索…">
+  </div>
+  <div class="item-list" id="itemList"></div>
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">正在连接…</span>
+  </div>
+</div>
+
+<div class="editor-area" id="editorArea">
+  <div id="emptyState" class="empty-state">
+    <div class="icon">APP_ICON</div>
+    <p>选择或新建一条 APP_ITEM_NAME</p>
+  </div>
+  <div id="editorPanel" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+    <div class="editor-toolbar">
+      <button class="back-btn" id="backBtn">‹ APP_TITLE</button>
+      <span id="metaLabel" style="font-size:.78rem;color:var(--sub);margin-left:auto;margin-right:0"></span>
+      <button class="del-btn" id="delBtn">🗑 删除</button>
+    </div>
+    <div class="due-row" id="dueRow">
+      <label>⏰ 截止时间：</label>
+      <input class="due-input" type="datetime-local" id="dueInput">
+      <button class="due-clear" id="dueClear" title="清除截止时间">✕</button>
+      <span class="due-badge" id="dueBadge" style="display:none"></span>
+    </div>
+    <input class="title-input" id="titleInput" placeholder="标题" maxlength="100">
+    <textarea class="content-input" id="contentInput" placeholder="开始记录…"></textarea>
+  </div>
+</div>
+
+<script>
+  const DATA_DIR = '/APP_DATA_DIR';  // 数据存储目录，每条记录一个 JSON 文件
+
+  let items = [];       // [{id, title, content, updatedAt, dueAt?}]
+  let currentId = null;
+  let saveTimer = null;
+  let saveStatus = 'idle';
+
+  const itemList    = document.getElementById('itemList');
+  const titleInput  = document.getElementById('titleInput');
+  const contentInput= document.getElementById('contentInput');
+  const dueInput    = document.getElementById('dueInput');
+  const dueBadge    = document.getElementById('dueBadge');
+  const dueClear    = document.getElementById('dueClear');
+  const statusDot   = document.getElementById('statusDot');
+  const statusText  = document.getElementById('statusText');
+  const metaLabel   = document.getElementById('metaLabel');
+  const editorPanel = document.getElementById('editorPanel');
+  const emptyState  = document.getElementById('emptyState');
+  const searchInput = document.getElementById('searchInput');
+
+  // ── 工具函数 ──
+  function genId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function formatDate(iso) {
+    const d = new Date(iso), now = new Date(), diff = now - d;
+    if (diff < 60000)    return '刚刚';
+    if (diff < 3600000)  return Math.floor(diff/60000) + ' 分钟前';
+    if (diff < 86400000) return Math.floor(diff/3600000) + ' 小时前';
+    return d.toLocaleDateString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+  }
+
+  function dueDiff(iso) { return iso ? new Date(iso) - new Date() : null; }
+
+  function formatDueShort(iso) {
+    if (!iso) return null;
+    const diff = dueDiff(iso);
+    const abs = Math.abs(diff);
+    const parts = [];
+    const days  = Math.floor(abs / 86400000);
+    const hours = Math.floor((abs % 86400000) / 3600000);
+    const mins  = Math.floor((abs % 3600000) / 60000);
+    if (days > 0)  parts.push(days + ' 天');
+    if (hours > 0) parts.push(hours + ' 小时');
+    if (mins > 0 || parts.length === 0) parts.push(mins + ' 分钟');
+    return (diff >= 0 ? '还有 ' : '逾期 ') + parts.join(' ');
+  }
+
+  function dueClass(iso) {
+    if (!iso) return '';
+    const diff = dueDiff(iso);
+    if (diff < 0)         return 'over';
+    if (diff < 86400000)  return 'warn';
+    return 'ok';
+  }
+
+  // ── 状态栏 ──
+  function setStatus(s, msg) {
+    saveStatus = s;
+    statusDot.className = 'status-dot' + (s !== 'idle' ? ' ' + s : '');
+    statusText.textContent = msg;
+  }
+
+  // ── 服务器 API ──
+  function itemPath(id) { return DATA_DIR + '/' + id + '.json'; }
+
+  async function ensureDir() {
+    await fetch('/api/mkdir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: DATA_DIR })
+    });
+  }
+
+  async function loadAll() {
+    setStatus('idle', '加载中…');
+    try {
+      await ensureDir();
+      const res  = await fetch('/api/ls?path=' + encodeURIComponent(DATA_DIR));
+      const data = await res.json();
+      const files = (data.items || []).filter(f => !f.isDirectory && f.name.endsWith('.json'));
+      const loaded = await Promise.all(files.map(async f => {
+        try {
+          const r = await fetch('/api/read?path=' + encodeURIComponent(DATA_DIR + '/' + f.name));
+          const d = await r.json();
+          return JSON.parse(d.content);
+        } catch { return null; }
+      }));
+      items = loaded.filter(Boolean).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      setStatus('saved', items.length + ' 条记录');
+      renderList();
+    } catch (e) {
+      setStatus('error', '连接失败');
+    }
+  }
+
+  async function saveItem(item) {
+    setStatus('saving', '保存中…');
+    try {
+      await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: itemPath(item.id), content: JSON.stringify(item) })
+      });
+      setStatus('saved', '已保存');
+      setTimeout(() => { if (saveStatus === 'saved') setStatus('idle', items.length + ' 条记录'); }, 2000);
+    } catch {
+      setStatus('error', '保存失败');
+    }
+  }
+
+  async function deleteItem(id) {
+    await fetch('/api/delete?path=' + encodeURIComponent(itemPath(id)), { method: 'DELETE' });
+    items = items.filter(m => m.id !== id);
+    if (currentId === id) { currentId = null; showEmpty(); }
+    setStatus('idle', items.length + ' 条记录');
+    renderList();
+  }
+
+  // ── 渲染 ──
+  function renderList() {
+    const q = searchInput.value.trim().toLowerCase();
+    const visible = q
+      ? items.filter(m => m.title.toLowerCase().includes(q) || m.content.toLowerCase().includes(q))
+      : items;
+
+    if (!visible.length) {
+      itemList.innerHTML = '<div class="empty-list">' + (q ? '没有匹配结果' : '暂无记录') + '</div>';
+      return;
+    }
+    itemList.innerHTML = visible.map(m => {
+      const dueLabel = formatDueShort(m.dueAt);
+      const cls = dueClass(m.dueAt);
+      return `
+        <div class="list-item ${m.id === currentId ? 'active' : ''}" data-id="${m.id}">
+          <div class="list-item-header">
+            <div class="list-item-title">${escHtml(m.title || '无标题')}</div>
+            <button class="item-del-btn" data-del-id="${m.id}" title="删除">×</button>
+          </div>
+          <div class="list-item-preview">${escHtml((m.content || '').slice(0,60).replace(/\n/g,' ') || '暂无内容')}</div>
+          <div class="list-item-meta">
+            <span>${formatDate(m.updatedAt)}</span>
+            ${dueLabel ? `<span class="due-tag ${cls}">${escHtml(dueLabel)}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function showEmpty() {
+    emptyState.style.display = 'flex';
+    editorPanel.style.display = 'none';
+  }
+
+  function updateDueBadge(iso) {
+    if (!iso) { dueBadge.style.display = 'none'; return; }
+    dueBadge.textContent = formatDueShort(iso);
+    dueBadge.className = 'due-badge ' + dueClass(iso);
+    dueBadge.style.display = '';
+  }
+
+  function openItem(id) {
+    const item = items.find(m => m.id === id);
+    if (!item) return;
+    currentId = id;
+    titleInput.value  = item.title;
+    contentInput.value = item.content;
+    dueInput.value    = item.dueAt ? item.dueAt.slice(0, 16) : '';
+    updateDueBadge(item.dueAt || null);
+    metaLabel.textContent = formatDate(item.updatedAt);
+    emptyState.style.display  = 'none';
+    editorPanel.style.display = 'flex';
+    document.getElementById('sidebar').classList.add('hidden');
+    renderList();
+  }
+
+  function newItem() {
+    const item = { id: genId(), title: '', content: '', updatedAt: new Date().toISOString(), dueAt: null };
+    items.unshift(item);
+    saveItem(item);
+    openItem(item.id);
+    renderList();
+    titleInput.focus();
+  }
+
+  // ── 自动保存（800ms 防抖） ──
+  function scheduleAutoSave() {
+    clearTimeout(saveTimer);
+    setStatus('saving', '等待保存…');
+    saveTimer = setTimeout(async () => {
+      const item = items.find(m => m.id === currentId);
+      if (!item) return;
+      item.title     = titleInput.value;
+      item.content   = contentInput.value;
+      item.dueAt     = dueInput.value ? new Date(dueInput.value).toISOString() : null;
+      item.updatedAt = new Date().toISOString();
+      items.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      metaLabel.textContent = formatDate(item.updatedAt);
+      updateDueBadge(item.dueAt);
+      renderList();
+      await saveItem(item);
+    }, 800);
+  }
+
+  titleInput.addEventListener('input', scheduleAutoSave);
+  contentInput.addEventListener('input', scheduleAutoSave);
+  dueInput.addEventListener('change', scheduleAutoSave);
+  dueClear.addEventListener('click', () => { dueInput.value = ''; scheduleAutoSave(); });
+
+  // 每分钟刷新截止时间标签
+  setInterval(() => {
+    renderList();
+    const item = items.find(m => m.id === currentId);
+    if (item) updateDueBadge(item.dueAt || null);
+  }, 60000);
+
+  // ── 事件绑定 ──
+  itemList.addEventListener('click', e => {
+    const delBtn = e.target.closest('[data-del-id]');
+    if (delBtn) {
+      const id = delBtn.dataset.delId;
+      const item = items.find(m => m.id === id);
+      if (confirm('删除"' + (item?.title || '无标题') + '"？')) deleteItem(id);
+      return;
+    }
+    const row = e.target.closest('[data-id]');
+    if (row) openItem(row.dataset.id);
+  });
+
+  document.getElementById('newBtn').addEventListener('click', newItem);
+  document.getElementById('delBtn').addEventListener('click', () => {
+    if (!currentId) return;
+    const item = items.find(m => m.id === currentId);
+    if (confirm('删除"' + (item?.title || '无标题') + '"？')) deleteItem(currentId);
+  });
+  document.getElementById('backBtn').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.remove('hidden');
+  });
+  searchInput.addEventListener('input', renderList);
+
+  // ── 启动 ──
+  loadAll();
+</script>
+</body>
+</html>
