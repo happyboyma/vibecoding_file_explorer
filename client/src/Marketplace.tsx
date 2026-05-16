@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { api } from "./api";
 import "./Marketplace.css";
 
+type SortKey = "default" | "name-asc" | "name-desc" | "recent";
+
 interface AppDef {
   id: string;
   icon: string;
@@ -12,6 +14,7 @@ interface AppDef {
   descCn: string;
   category: "builtin" | "installed";
   color: string;
+  mtime?: string;
   action: () => void;
 }
 
@@ -25,6 +28,7 @@ export default function Marketplace() {
   const [installedApps, setInstalledApps] = useState<AppDef[]>([]);
   const [category, setCategory] = useState<"all" | "builtin" | "installed">("all");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("default");
   const navigate = useNavigate();
 
   const builtinApps: AppDef[] = [
@@ -65,6 +69,7 @@ export default function Marketplace() {
           descCn: `Web 应用`,
           category: "installed" as const,
           color: ACCENT_COLORS[i % ACCENT_COLORS.length],
+          mtime: item.mtime,
           action: () => window.open(`/apps/${encodeURIComponent(item.name)}/`, "_blank"),
         }));
       setInstalledApps(apps);
@@ -73,16 +78,29 @@ export default function Marketplace() {
 
   const allApps = [...builtinApps, ...installedApps];
 
-  const filtered = allApps.filter(app => {
-    if (category === "builtin" && app.category !== "builtin") return false;
-    if (category === "installed" && app.category !== "installed") return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (!app.name.toLowerCase().includes(q) && !app.nameCn.includes(q) &&
-          !app.desc.toLowerCase().includes(q) && !app.descCn.includes(q)) return false;
-    }
-    return true;
-  });
+  const filtered = allApps
+    .filter(app => {
+      if (category === "builtin" && app.category !== "builtin") return false;
+      if (category === "installed" && app.category !== "installed") return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (!app.name.toLowerCase().includes(q) && !app.nameCn.includes(q) &&
+            !app.desc.toLowerCase().includes(q) && !app.descCn.includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const nameA = lang === "zh" ? a.nameCn : a.name;
+      const nameB = lang === "zh" ? b.nameCn : b.name;
+      if (sort === "name-asc") return nameA.localeCompare(nameB, lang);
+      if (sort === "name-desc") return nameB.localeCompare(nameA, lang);
+      if (sort === "recent") {
+        const ta = a.mtime ? new Date(a.mtime).getTime() : 0;
+        const tb = b.mtime ? new Date(b.mtime).getTime() : 0;
+        return tb - ta;
+      }
+      return 0;
+    });
 
   const tabs = [
     { id: "all",       label: lang === "zh" ? "全部" : "All" },
@@ -190,6 +208,16 @@ export default function Marketplace() {
               <span className="mp-section-count">
                 {filtered.length} {lang === "zh" ? "个" : ""}
               </span>
+              <select
+                className="mp-sort-select"
+                value={sort}
+                onChange={e => setSort(e.target.value as SortKey)}
+              >
+                <option value="default">{lang === "zh" ? "默认排序" : "Default"}</option>
+                <option value="name-asc">{lang === "zh" ? "名称 A → Z" : "Name A → Z"}</option>
+                <option value="name-desc">{lang === "zh" ? "名称 Z → A" : "Name Z → A"}</option>
+                <option value="recent">{lang === "zh" ? "最近添加" : "Recently Added"}</option>
+              </select>
             </div>
 
             <div className="mp-grid">
